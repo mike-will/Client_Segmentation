@@ -306,6 +306,8 @@ Group3 <- subset(ClientProfiles,Group==3)
 <br>
 <br>
 <br>
+<br>
+<br>
 
 ### Client Segmentation Demographics
 
@@ -401,6 +403,11 @@ ggplot(ClientProfiles, aes(x=Group, y=Gap, color=Group, fill=Group)) +
 
 
 <br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
 ### Group 1 Representatives
 
@@ -436,6 +443,8 @@ kable(Group3Reps[1:20,1:3])
 ```
 
 
+<br>
+<br>
 <br>
 
 # Mailing List Output
