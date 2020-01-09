@@ -14,7 +14,7 @@ This project began with an inquiry from a local business owner interested in est
 
 Following the usual data profiling / exploratory data analysis, and direct contact with the SaaS company operating the cloud-based software used by the studio, all necesary client attributes had been identified.  A direct back-end connection wasn't available for studios using the company's software, so this tool instead utilizes standard reports produced by the cloud-based software.
 
-While decriptive statistics are valuable in differentiating the client groupings established within this analysis, I knew that the raw data available wasn't rich enough to meaningfully guide content creation.  While a standard K means clustering algorithm would generally be used to identify appropriate client groupings, I opted to instead use fuzzy K means clustering in order to also generate a list of "representatives" for each client group, who had been assigned to their particular group with the highest levels of certainty.  
+While decriptive statistics are valuable in differentiating the client groupings established within this analysis, I knew that the raw data available wasn't rich enough to meaningfully guide content creation.  Though a standard K means clustering algorithm would generally be used to identify appropriate client groupings, I opted to instead use fuzzy K means clustering in order to also generate a list of "representatives" for each client group, who had been assigned to their particular group with the highest levels of certainty.  
 
 This made it possible for the studio's staff to review those lists, and craft their messaging in much the same way they would during conversation with the individuals listed.
 
