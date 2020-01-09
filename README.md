@@ -18,6 +18,6 @@ While decriptive statistics are valuable in differentiating the client groupings
 
 This made it possible for the studio's staff to review those lists, and craft their messaging in much the same way they would during conversation with the individuals listed.
 
-Since this is a tool to be used independently by the business, no commentary is included, since interpretation will vary as source data evolves.  Prior to finalization and deployment, a consultation was arranged with the business owner, providing an opportunity for collaborative exploration, and guidance in the use and interpretation of the output.
+Since this is a tool to be used independently by the business, no commentary is included, since interpretation will vary as source data evolves.  Prior to finalization and deployment, a consultation was arranged with the business owner, providing an opportunity for collaborative exploration, and guidance in use and output interpretation.
 
 
