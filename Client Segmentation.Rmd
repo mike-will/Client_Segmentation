@@ -1,0 +1,469 @@
+---
+title: "Client Segmentation Analysis"
+author: "Mike Will"
+date: "March 31, 2019"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(knitr)
+library(dplyr)
+library(lubridate)
+library(readr)
+library(tidyr)
+library(generator)
+library(xts)
+library(cluster)
+library(e1071)
+library(ggplot2)
+library(scales)
+library(fmsb)
+```
+
+
+```{r, include=FALSE}
+palette <- list(`red`="#d11141",`green`= "#00b159",`blue`= "#00aedb",`orange`= "#f37735",`yellow`="#ffc425",`light grey`="#cccccc",`dark grey`="#8c8c8c")
+```
+
+
+```{r, include=FALSE}
+#Data Ingestion
+
+
+#Project Use
+
+# TransHistFull <- read.csv("D:/Data Analytics/Porfolio/Client_Segmentation/Raw Data/SalesByService Report.csv", header=TRUE)
+# Visits <- read.csv("D:/Data Analytics/Porfolio/Client_Segmentation/Raw Data/ScheduleAtAGlance Report.csv", header=TRUE)
+# Contact <- read.csv("D:/Data Analytics/Porfolio/Client_Segmentation/Raw Data/Mailing List.csv", header=TRUE)
+# Contact <- Contact %>% select(ID, First.name, Last.name, Email) %>% rename(Client.ID=ID) %>% mutate(Client.ID=as.factor(Client.ID))
+
+
+#Portfolio Use - Bring in anonymized data sets, and generate fake client / contact details to repopulate PII removed from actual project files
+
+TransHistFull <- read.csv(file.choose(), header=TRUE, skip=0)   #Select SalesByService Report
+Visits <- read.csv(file.choose(), header=TRUE, skip=0)          #Select ScheduleAtAGlance Report
+Contact <- read.csv(file.choose(), header=TRUE, skip=0)         #Select Mailing List
+
+NamesReplace <- r_full_names(n=nrow(Contact))
+EmailReplace <- r_email_addresses(n=nrow(Contact))
+ContactReplace <- as.data.frame(cbind(NamesReplace, EmailReplace)) %>%
+  separate(NamesReplace, c("First.name","Last.name"), sep=" ", extra="merge", remove=TRUE) %>%
+  rename(Email=EmailReplace)
+
+Contact <- Contact %>% select(ID) %>%
+  rename(Client.ID=ID) %>%
+  mutate(Client.ID=as.factor(Client.ID)) %>%
+  cbind(.,ContactReplace)
+
+```
+
+
+```{r, include=FALSE}
+#Variable Selection
+
+TransHist <- TransHistFull %>% 
+  select(Client.ID, Category, Sale.Date, Total.amount) %>% 
+  mutate(Sale.Date=mdy(Sale.Date)) %>%
+  mutate(Total.amount=as.numeric(Total.amount)) %>%
+  as_tibble()
+
+TransHist
+```
+
+```{r, include=FALSE}
+#Category Assignments for Outdated Service Naming Conventions
+
+TransHist <- data.frame(lapply(TransHist,function(x) {
+  gsub("Reformer", "Movement", x)
+}))
+                     
+TransHist <- data.frame(lapply(TransHist,function(x) {
+  gsub("Dynamic Pricing", "Movement", x)
+}))
+
+TransHist <- data.frame(lapply(TransHist,function(x) {
+  gsub("Yoga", "Movement", x)
+}))
+
+TransHist <- data.frame(lapply(TransHist,function(x) {
+  gsub("Movement Classes", "Movement", x)
+}))
+
+TransHist <- data.frame(lapply(TransHist,function(x) {
+  gsub("Private Sessions", "Private / Massage", x)
+}))
+
+TransHist <- data.frame(lapply(TransHist,function(x) {
+  gsub("Massage Therapy", "Private / Massage", x)
+}))
+
+```
+
+```{r, include=FALSE}
+#Quality Check - Missing Values
+
+any(is.na(TransHist))
+```
+
+```{r, include=FALSE}
+#Visit Frequency, by Client
+
+VisitFreq <- Visits %>% select(Client.ID,Date,Status) %>%
+  filter(Status=="Completed" | Status=="Signed in") %>%
+  filter(Client.ID!="---") %>%
+  group_by(Client.ID) %>% 
+  arrange(Date) %>%
+  mutate(Delta = c(NA, diff(Date))) %>%
+  na.omit(Delta) %>%
+  summarise(AveFreq=mean(Delta)) %>%
+  mutate(AveFreq=AveFreq/7)
+
+VisitFreq
+
+count(VisitFreq)
+
+OneTimers <- Visits %>% select(Client.ID,Date,Status) %>%
+  filter(Status=="Completed" | Status=="Signed in") %>%
+  select(Client.ID,Date) %>%
+  anti_join(VisitFreq) %>%
+  mutate(Date=mdy(Date)) %>%
+  arrange(Date) %>%
+  as_tibble()
+
+OneTimers
+
+Cal <- as.data.frame(seq.Date(as.Date(min(OneTimers$Date)),as.Date(max(OneTimers$Date)), by=1)) %>%
+  magrittr::set_colnames(c("Date"))
+
+AggOneTimers <- OneTimers %>% group_by(Date) %>%
+  summarise(One_Timers=n()) %>% 
+  ungroup() %>%
+  right_join(Cal) %>%
+  replace(is.na(.),0)
+
+count(OneTimers)
+
+```
+
+
+<br>
+
+```{r, echo=FALSE, message=FALSE}
+#Histogram - Visit Frequency, by Client
+
+ggplot(data=VisitFreq, aes(AveFreq)) + 
+  geom_histogram(binwidth=1, boundary = 0, closed = "left", color="grey", fill=palette$green) + 
+  scale_x_continuous(minor_breaks = seq(0, 1000, 4), breaks = seq(0, 1000, 4)) +
+  scale_y_continuous(minor_breaks = seq(0, 1000, 5), breaks = seq(0, 1000, 5)) +
+  labs(x="Average Visit Frequency (Weeks)", y="Number of Clients", title="Average Visit Frequency")
+
+```
+
+
+<br>
+
+```{r, echo=FALSE, message=FALSE}
+#Time Series - One-Time Visitors, by Date
+
+ggplot(data=AggOneTimers, aes(x=Date, y=One_Timers)) + 
+  geom_bar(stat="identity", fill=palette$blue) +
+  xlim(min(AggOneTimers$Date), max(AggOneTimers$Date)) + 
+  scale_x_date(date_labels="%B-%Y",date_breaks="month") + 
+  scale_y_continuous(minor_breaks = seq(5, 1000, 5), breaks = seq(5, 1000, 5)) +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  labs(x="Date", y="One-Time Visitors", title="History of One-Time Visitors (Count, by Day)")
+
+```
+
+
+
+```{r, include=FALSE}
+#Weeks Since Last Visit, by Client
+
+WeeksSince <- Visits %>% select(Client.ID,Date,Status) %>%
+  filter(Status=="Completed" | Status=="Signed in") %>%
+  filter(Client.ID!="---") %>%  
+  group_by(Client.ID) %>%
+  mutate(Date=mdy(Date)) %>%
+  filter(Date==max(Date)) %>%
+  distinct(Client.ID, .keep_all=TRUE) %>%
+  rename(LastVisit=Date) %>%
+  # mutate(Gap=difftime(as_date(Sys.Date()), LastVisit, units="weeks")) %>%           #Replaced with the following line for portfolio use
+  mutate(Gap=difftime(as_date("2019-03-31"), LastVisit, units="weeks")) %>%
+  mutate(Gap=as.numeric(Gap)) %>%
+  arrange(Client.ID)
+
+WeeksSince
+```
+
+```{r, include=FALSE}
+#Total Spend, by Client
+
+Spend <- TransHist %>% group_by(Client.ID) %>%
+  mutate(Total.amount=as.numeric(Total.amount)) %>%
+  summarise(TotalSpend=sum(Total.amount))
+  
+Spend
+```
+
+```{r, include=FALSE}
+#Product Blend, by Client
+
+Blend <- TransHist %>% group_by(Client.ID) %>% 
+  count(Category) %>% 
+  spread(Category,n) %>%
+  ungroup()
+Blend[is.na(Blend)] <- 0
+
+BlendNorm <- as_tibble(cbind(Blend[,1],(Blend[,2:4]/rowSums(Blend[,2:4]))))
+
+BlendNorm
+```
+
+```{r, include=FALSE}
+#Consolidate Feature Datasets
+
+ClientProfiles <- BlendNorm %>% left_join(Spend) %>%
+  left_join(WeeksSince) %>%
+  left_join(VisitFreq) %>%
+  select(Client.ID, AveFreq, Gap, TotalSpend, `Private / Massage`, `Movement`, `Immersions`)
+ClientProfiles[is.na(ClientProfiles)] <- 0
+```
+
+
+<br>
+
+## Clustering Analysis
+
+
+<br>
+
+### Excerpt from Baseline Data Set
+
+
+```{r, echo=FALSE, results='asis'}
+kable(ClientProfiles[1:5,])
+```
+
+
+<br>
+
+```{r, echo=FALSE}
+#Evaluate Optimized Cluster Count
+
+set.seed(243)
+FuzzyKSel <- clusGap(scale(ClientProfiles[,-1], scale=TRUE), FUN=cmeans, K.max=10, B=100)
+plot(FuzzyKSel, main="Clustering Evaluation", xlab="Number of Clusters", ylab="Gap Statistic")
+```
+
+```{r, include=FALSE}
+#Fuzzy K-Means Clustering
+
+set.seed(77)
+FuzzyK3 <- cmeans(scale(ClientProfiles[,-1], scale=TRUE), centers=3)
+```
+
+
+<br>
+
+### Cluster Sizes
+
+```{r, echo=FALSE, results='asis'}
+#Group Sizes - Fuzzy K-Means
+
+GroupSizes <- FuzzyK3$size %>% t() %>% `colnames<-`(c("Group 1", "Group 2", "Group 3"))
+kable(GroupSizes)
+```
+
+```{r, include=FALSE}
+#Apply Group Assignments and Grouping Confidence to Client Profiles
+
+ClientProfiles$Group <- as.factor(FuzzyK3$cluster)
+ClientProfiles$Confidence <- as.vector(round(apply(FuzzyK3$membership,1,max),2))
+```
+
+```{r, include=FALSE}
+#Apply Email Addresses, and Split Datasets
+
+ClientProfiles <- ClientProfiles %>% left_join(Contact)
+
+Group1 <- subset(ClientProfiles,Group==1)
+Group2 <- subset(ClientProfiles,Group==2)
+Group3 <- subset(ClientProfiles,Group==3)
+```
+
+
+
+<br>
+<br>
+<br>
+
+### Client Segmentation Demographics
+
+
+<br>
+<br>
+<br>
+
+```{r, include=FALSE}
+#Create Blend Quantiles for Each Client Group
+
+Group1Quants <- data.frame
+Group1Quants <- as.data.frame(quantile(Group1$`Private / Massage`))
+Group1Quants[,2] <- as.data.frame(quantile(Group1$Movement))
+Group1Quants[,3] <- as.data.frame(quantile(Group1$Immersions))
+colnames(Group1Quants) <- c("Private / Massage","Movement","Immersions")
+Group1Quants <- rbind(rep(1.0,3),rep(0,3),Group1Quants)
+
+Group2Quants <- data.frame
+Group2Quants <- as.data.frame(quantile(Group2$`Private / Massage`))
+Group2Quants[,2] <- as.data.frame(quantile(Group2$Movement))
+Group2Quants[,3] <- as.data.frame(quantile(Group2$Immersions))
+colnames(Group2Quants) <- c("Private / Massage","Movement","Immersions")
+Group2Quants <- rbind(rep(1.0,3),rep(0,3),Group2Quants)
+
+Group3Quants <- data.frame
+Group3Quants <- as.data.frame(quantile(Group3$`Private / Massage`))
+Group3Quants[,2] <- as.data.frame(quantile(Group3$Movement))
+Group3Quants[,3] <- as.data.frame(quantile(Group3$Immersions))
+colnames(Group3Quants) <- c("Private / Massage","Movement","Immersions")
+Group3Quants <- rbind(rep(1.0,3),rep(0,3),Group3Quants)
+```
+
+
+
+```{r, echo=FALSE, message=FALSE}
+#Client Segmentation Demographics - Product / Service Blend
+
+par(mfrow=c(1, 3))
+
+radarchart(Group1Quants, axistype=2, seg=3, title="Group 1 Blend (Quantiles)", pcol=c(palette$orange,palette$blue,palette$yellow,palette$green,palette$red), plwd=2.5, cglcol="grey", cglty=1, axislabcol="black", centerzero=FALSE, palcex=1.25)
+
+radarchart(Group2Quants, axistype=2, seg=3, title="Group 2 Blend (Quantiles)", pcol=c(palette$orange,palette$blue,palette$yellow,palette$green,palette$red), plwd=2.5, cglcol="grey", cglty=1, axislabcol="black", centerzero=FALSE, palcex=1.25)
+
+radarchart(Group3Quants, axistype=2, seg=3, title="Group 3 Blend (Quantiles)", pcol=c(palette$orange,palette$blue,palette$yellow,palette$green,palette$red), plwd=2.5, cglcol="grey", cglty=1, axislabcol="black", centerzero=FALSE, palcex=1.25)
+
+```
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Client Segmentation Demographics - Total Spend
+
+ggplot(ClientProfiles, aes(x=Group, y=TotalSpend, color=Group, fill=Group)) + 
+  geom_violin(trim=TRUE, alpha=.2) +
+  geom_boxplot(width=0.05, outlier.colour=palette$blue, outlier.shape=16, outlier.size=1, alpha=.3) +
+  scale_colour_manual(values=c(palette$orange,palette$yellow,palette$green)) +
+  scale_fill_manual(values=c(palette$orange,palette$yellow,palette$green)) +
+  scale_y_continuous(minor_breaks = seq(0, 100000, 100), breaks = seq(0, 100000, 500)) +
+  labs(x="Group", y="Total Spend ($)", title="Total Spend, by Group")
+```
+
+
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Client Segmentation Demographics - Average Visit Frequency, in Weeks
+
+ggplot(ClientProfiles %>% filter(AveFreq!=0), aes(x=Group, y=AveFreq, color=Group, fill=Group)) + 
+  geom_violin(trim=TRUE, alpha=.2) +
+  geom_boxplot(width=0.05, outlier.colour=palette$blue, outlier.shape=16, outlier.size=1, alpha=.3) +
+  scale_colour_manual(values=c(palette$orange,palette$yellow,palette$green)) +
+  scale_fill_manual(values=c(palette$orange,palette$yellow,palette$green)) +
+  scale_y_continuous(minor_breaks = seq(0, 1000, 4), breaks = seq(0, 1000, 4)) +
+  labs(x="Group", y="Average Visit Frequency (Weeks)", title="Average Visit Frequency, by Group")
+```
+
+
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Client Segmentation Demographics - Time Since Last Visit, in Weeks
+
+ggplot(ClientProfiles, aes(x=Group, y=Gap, color=Group, fill=Group)) + 
+  geom_violin(trim=TRUE, alpha=.2) +
+  geom_boxplot(width=0.05, outlier.colour=palette$blue, outlier.shape=16, outlier.size=1, alpha=.3) +
+  scale_colour_manual(values=c(palette$orange,palette$yellow,palette$green)) +
+  scale_fill_manual(values=c(palette$orange,palette$yellow,palette$green)) +
+  scale_y_continuous(minor_breaks = seq(0, 1000, 4), breaks = seq(0, 1000, 4)) +
+  labs(x="Group", y="Time Since Last Visit (Weeks)", title="Time Since Last Visit, by Group")
+```
+
+
+
+<br>
+
+### Group 1 Representatives
+
+```{r, echo=FALSE, results='asis'}
+#Group 1 Ambassadors
+
+Group1Reps <- Group1 %>% arrange(desc(Confidence)) %>% select(First.name, Last.name, Confidence)
+kable(Group1Reps[1:20,1:3])
+```
+
+
+<br>
+
+### Group 2 Representatives
+
+```{r, echo=FALSE, results='asis'}
+#Group 2 Ambassadors
+
+Group2Reps <- Group2 %>% arrange(desc(Confidence)) %>% select(First.name, Last.name, Confidence)
+kable(Group2Reps[1:20,1:3])
+```
+
+
+<br>
+
+### Group 3 Representatives
+
+```{r, echo=FALSE, results='asis'}
+#Group 3 Ambassadors
+
+Group3Reps <- Group3 %>% arrange(desc(Confidence)) %>% select(First.name, Last.name, Confidence)
+kable(Group3Reps[1:20,1:3])
+```
+
+
+<br>
+
+# Mailing List Output
+
+
+```{r, include=FALSE}
+# Mailing List Creation
+
+Group1List <- Group1 %>% select(First.name, Last.name, Email) %>% filter(Email!="")
+Group2List <- Group2 %>% select(First.name, Last.name, Email) %>% filter(Email!="")
+Group3List <- Group3 %>% select(First.name, Last.name, Email) %>% filter(Email!="")
+Group4List <- Contact %>% anti_join(ClientProfiles, by="Client.ID") %>% select(First.name, Last.name, Email) %>% filter(Email!="")
+```
+
+```{r}
+# Mailing List Output
+
+write.csv(Group1List, file="Group 1 Email List.csv", quote=F, row.names=F)
+write.csv(Group2List, file="Group 2 Email List.csv", quote=F, row.names=F)
+write.csv(Group3List, file="Group 3 Email List.csv", quote=F, row.names=F)
+write.csv(Group4List, file="Group 4 Email List (No Paid Visit History).csv", quote=F, row.names=F)
+```
+
+
+
+
+
+
+
+
+
