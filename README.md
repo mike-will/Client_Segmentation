@@ -2,15 +2,13 @@
 
 Analysis for client operating a local wellness studio with a desire to establish tailored marketing communications 
 
-
-NOTE:  Data included in this repo has been anonymized, with PII pertaining to the business' actual clientele removed and replaced with generated client names and contact information.
-
-
 This project began with an inquiry from a local business owner interested in establishing tailored communication channels for appropriately-segmented portions of his clientele.  A preliminary evaluation of his data availability, and further discussion of his high-level objectives indicated a viable path forward, with the following goals:
 
 - Determine how best to group clientele for tailored email messaging, ideally limiting the number of groups to a small handful
 - Produce output for each group which could be fed directly into the company's email distribution platform
 - Complement that output with descriptive detail to inform relevant content creation
+
+NOTE:  Data included in this repo has been anonymized, with PII pertaining to the business' actual clientele removed and replaced with generated client names and contact information.
 
 Following the usual data profiling / exploratory data analysis, and direct contact with the SaaS company operating the cloud-based software used by the studio, all necesary client attributes had been identified.  A direct back-end connection wasn't available for studios using the company's software, so this tool instead utilizes standard reports produced by the cloud-based software.
 
