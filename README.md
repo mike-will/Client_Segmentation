@@ -1,6 +1,6 @@
 # Client_Segmentation
 
-Analysis for client operating a local wellness studio with a desire to establish tailored marketing communications 
+Analysis for client operating a local wellness studio with a desire to establish tailored marketing communications.  PDF viewing recommended in conjunction with R Markdown file.  
 
 This project began with an inquiry from a local business owner interested in establishing tailored communication channels for appropriately-segmented portions of his clientele.  A preliminary evaluation of his data availability, along with further discussion of his high-level objectives indicated a viable path forward, and we established the following project goals:
 
